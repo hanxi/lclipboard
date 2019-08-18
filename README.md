@@ -27,7 +27,7 @@ See `build.bat`
 
 # TEST
 
-See `test.lua`
+See `lua/bin/test.lua`
 
 # TODO
 
