@@ -29,3 +29,6 @@ See `build.bat`
 
 See `test.lua`
 
+# TODO
+
+Now only support windows.
