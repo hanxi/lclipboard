@@ -31,4 +31,4 @@ See `lua/bin/test.lua`
 
 # TODO
 
-Now only support windows.
+Now only support windows and only support text.
