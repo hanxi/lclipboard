@@ -18,7 +18,6 @@ LDFLAGS= /NOLOGO /DLL /SUBSYSTEM:windows \
 
 # /SUBSYSTEM:windows /ENTRY:mainCRTStartup \
 
-TO_LDIR=
 INSTALL_CDIR=$(LUA_INSTALL_PATH)\bin
 
 all: clipboard.dll install
