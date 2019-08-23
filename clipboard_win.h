@@ -40,7 +40,7 @@ static void _clipboard_onchange(HWND hwnd)
 
 static void clipboard_settext(const char *text)
 {
-    size_t len = strlen(text);
+    size_t len = strlen(text) + 1;
     HGLOBAL hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, len);
     if (hmem != NULL)
     {
