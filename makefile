@@ -20,7 +20,7 @@ LDFLAGS= /NOLOGO /DLL /SUBSYSTEM:windows \
 
 INSTALL_CDIR=$(LUA_INSTALL_PATH)\bin
 
-all: clipboard.dll install
+all: clipboard.dll clipboard.lib install
 
 #compile
 {$(SRC_DIR)}.c{$(OBJ_DIR)}.obj:
@@ -31,9 +31,13 @@ all: clipboard.dll install
 clipboard.dll: $(OBJ_DIR)\lclipboard.obj
     LINK $? $(LDFLAGS)$@
 
+clipboard.lib: $(OBJ_DIR)\lclipboard.obj
+    LIB /nologo /OUT:$@ $?
+
 install:
     @if not exist $(INSTALL_CDIR) mkdir $(INSTALL_CDIR)
     @for %I in (clipboard.dll) do copy %I $(INSTALL_CDIR)
+    @copy clipboard.lib $(LUA_INSTALL_PATH)\lib
 
 clean:
     rd /S /Q $(OBJ_DIR)

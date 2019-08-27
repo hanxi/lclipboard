@@ -14,9 +14,23 @@ static HWND hwndnextviewer;
 static UINT format_list[] = {
     CF_TEXT,
 };
-static void* _context = NULL;
+static void *_context = NULL;
 static void (*_clipboard_onchange_text)(void *, const char *, int);
 static int change_from_set = 0;
+
+char *asciitoutf8(const char *lpstr)
+{
+    int ulen = MultiByteToWideChar(CP_ACP, 0, lpstr, -1, NULL, 0);
+    int bytes = (ulen + 1) * sizeof(wchar_t);
+    wchar_t *utext = malloc(bytes);
+    MultiByteToWideChar(CP_ACP, 0, lpstr, -1, utext, ulen);
+
+    int sz = WideCharToMultiByte(CP_UTF8, 0, utext, -1, NULL, 0, NULL, NULL);
+    char *utf8text = malloc(sz);
+    WideCharToMultiByte(CP_UTF8, 0, utext, -1, utf8text, sz, NULL, NULL);
+    free(utext);
+    return utf8text;
+}
 
 static void _clipboard_onchange(HWND hwnd)
 {
@@ -29,7 +43,9 @@ static void _clipboard_onchange(HWND hwnd)
             LPSTR lpstr = GlobalLock(hglb);
             if (_clipboard_onchange_text)
             {
-                _clipboard_onchange_text(_context, lpstr, change_from_set);
+                char *utf8text = asciitoutf8(lpstr);
+                _clipboard_onchange_text(_context, utf8text, change_from_set);
+                free(utf8text);
             }
             change_from_set = 0;
             GlobalUnlock(hglb);
@@ -38,10 +54,25 @@ static void _clipboard_onchange(HWND hwnd)
     }
 }
 
+char *utf8toascii(const char *text, int *sz)
+{
+    int ulen = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+    int bytes = (ulen + 1) * sizeof(wchar_t);
+    wchar_t *utext = malloc(bytes);
+    MultiByteToWideChar(CP_UTF8, 0, text, -1, utext, ulen);
+
+    *sz = WideCharToMultiByte(CP_ACP, 0, utext, -1, NULL, 0, NULL, NULL);
+    char *asciitext = malloc(*sz);
+    WideCharToMultiByte(CP_ACP, 0, utext, -1, asciitext, *sz, NULL, NULL);
+    free(utext);
+    return asciitext;
+}
+
 static void clipboard_settext(const char *text)
 {
-    size_t len = strlen(text) + 1;
-    HGLOBAL hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, len);
+    int sz = 0;
+    char *asciitext = utf8toascii(text, &sz);
+    HGLOBAL hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sz);
     if (hmem != NULL)
     {
         if (OpenClipboard(hwnd))
@@ -49,7 +80,7 @@ static void clipboard_settext(const char *text)
             PVOID pdata = GlobalLock(hmem);
             if (pdata != NULL)
             {
-                CopyMemory(pdata, text, len);
+                CopyMemory(pdata, asciitext, sz);
                 change_from_set = 1;
             }
             GlobalUnlock(hmem);
@@ -70,6 +101,7 @@ static void clipboard_settext(const char *text)
             GlobalFree(hmem);
         }
     }
+    free(asciitext);
 }
 
 static LRESULT CALLBACK _wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -106,7 +138,7 @@ static LRESULT CALLBACK _wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-static int clipboard_init(void* context, void (*p)(void *, const char *, int))
+static int clipboard_init(void *context, void (*p)(void *, const char *, int))
 {
     memset(&wc, 0, sizeof(wc));
     wc.cbSize = sizeof(WNDCLASSEX);
