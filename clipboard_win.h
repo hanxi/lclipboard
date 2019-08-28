@@ -4,104 +4,76 @@
 #include <stdio.h>
 #include <windows.h>
 
-#define WC_CLIPBOARD_CLASS_NAME "CLIPBOARD"
+#define WC_CLIPBOARD_CLASS_NAME L"CLIPBOARD"
 #define WM_TRAY_CALLBACK_MESSAGE (WM_USER + 1)
 #define ID_TRAY_FIRST 1000
 
 static WNDCLASSEX wc;
 static HWND hwnd;
 static HWND hwndnextviewer;
-static UINT format_list[] = {
-    CF_TEXT,
-};
 static void *_context = NULL;
 static void (*_clipboard_onchange_text)(void *, const char *, int);
 static int change_from_set = 0;
 
-char *asciitoutf8(const char *lpstr)
-{
-    int ulen = MultiByteToWideChar(CP_ACP, 0, lpstr, -1, NULL, 0);
-    int bytes = (ulen + 1) * sizeof(wchar_t);
-    wchar_t *utext = malloc(bytes);
-    MultiByteToWideChar(CP_ACP, 0, lpstr, -1, utext, ulen);
-
-    int sz = WideCharToMultiByte(CP_UTF8, 0, utext, -1, NULL, 0, NULL, NULL);
-    char *utf8text = malloc(sz);
-    WideCharToMultiByte(CP_UTF8, 0, utext, -1, utf8text, sz, NULL, NULL);
-    free(utext);
-    return utf8text;
-}
-
 static void _clipboard_onchange(HWND hwnd)
 {
-    UINT format = GetPriorityClipboardFormat(format_list, 1);
-    if (format == CF_TEXT)
+    if (!_clipboard_onchange_text) 
     {
-        if (OpenClipboard(hwnd))
-        {
-            HGLOBAL hglb = GetClipboardData(format);
-            LPSTR lpstr = GlobalLock(hglb);
-            if (_clipboard_onchange_text)
-            {
-                char *utf8text = asciitoutf8(lpstr);
-                _clipboard_onchange_text(_context, utf8text, change_from_set);
-                free(utf8text);
-            }
-            change_from_set = 0;
-            GlobalUnlock(hglb);
-            CloseClipboard();
-        }
+        return;
     }
-}
 
-char *utf8toascii(const char *text, int *sz)
-{
-    int ulen = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
-    int bytes = (ulen + 1) * sizeof(wchar_t);
-    wchar_t *utext = malloc(bytes);
-    MultiByteToWideChar(CP_UTF8, 0, text, -1, utext, ulen);
+    if (!OpenClipboard(hwnd))
+    {
+        return;
+    }
 
-    *sz = WideCharToMultiByte(CP_ACP, 0, utext, -1, NULL, 0, NULL, NULL);
-    char *asciitext = malloc(*sz);
-    WideCharToMultiByte(CP_ACP, 0, utext, -1, asciitext, *sz, NULL, NULL);
-    free(utext);
-    return asciitext;
+    HGLOBAL wbuf_handle = GetClipboardData(CF_UNICODETEXT);
+    if (wbuf_handle == NULL)
+    {
+        CloseClipboard();
+        return;
+    }
+
+    const WCHAR* wbuf_global = GlobalLock(wbuf_handle);
+    if (wbuf_global)
+    {
+        int buf_len = WideCharToMultiByte(CP_UTF8, 0, wbuf_global, -1, NULL, 0, NULL, NULL);
+        char *text = (char *)malloc(buf_len);
+        WideCharToMultiByte(CP_UTF8, 0, wbuf_global, -1, text, buf_len, NULL, NULL);
+        _clipboard_onchange_text(_context, text, change_from_set);
+        free(text);
+    }
+    change_from_set = 0;
+    GlobalUnlock(wbuf_handle);
+    CloseClipboard();
 }
 
 static void clipboard_settext(const char *text)
 {
-    int sz = 0;
-    char *asciitext = utf8toascii(text, &sz);
-    HGLOBAL hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_DDESHARE, sz);
-    if (hmem != NULL)
+    if (!OpenClipboard(NULL))
     {
-        if (OpenClipboard(hwnd))
-        {
-            PVOID pdata = GlobalLock(hmem);
-            if (pdata != NULL)
-            {
-                CopyMemory(pdata, asciitext, sz);
-                change_from_set = 1;
-            }
-            GlobalUnlock(hmem);
-            if (EmptyClipboard())
-            {
-                if (SetClipboardData(CF_TEXT, hmem))
-                {
-                }
-                else
-                {
-                    GlobalFree(hmem);
-                }
-            }
-            CloseClipboard();
-        }
-        else
-        {
-            GlobalFree(hmem);
-        }
+        return;
     }
-    free(asciitext);
+    const int wbuf_length = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+    HGLOBAL wbuf_handle = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)wbuf_length * sizeof(WCHAR));
+    if (wbuf_handle == NULL)
+    {
+        CloseClipboard();
+        return;
+    }
+    WCHAR *wbuf_global = (WCHAR *)GlobalLock(wbuf_handle);
+    MultiByteToWideChar(CP_UTF8, 0, text, -1, wbuf_global, wbuf_length);
+    GlobalUnlock(wbuf_handle);
+    EmptyClipboard();
+    if (SetClipboardData(CF_UNICODETEXT, wbuf_handle) == NULL)
+    {
+        GlobalFree(wbuf_handle);
+    }
+    else
+    {
+        change_from_set = 1;
+    }
+    CloseClipboard();
 }
 
 static LRESULT CALLBACK _wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
