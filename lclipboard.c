@@ -20,7 +20,9 @@ static void on_clipboard_change(void *context, const char *text, int change_from
         }
         lua_pushstring(L, text);
         lua_pushboolean(L, change_from_set);
-        lua_call(L, 2, 0);
+        if (lua_pcall(L, 2, 0, 0)) {
+            printf("%s\n", lua_tostring(L, -1));
+        }
     }
 }
 
